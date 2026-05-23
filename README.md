@@ -1,5 +1,8 @@
 # open-trading-api
 
+[![CI](https://github.com/Fhwang0926/open-trading-api/actions/workflows/ci.yml/badge.svg)](https://github.com/Fhwang0926/open-trading-api/actions/workflows/ci.yml)
+[![Publish npm Package](https://github.com/Fhwang0926/open-trading-api/actions/workflows/publish-npm.yml/badge.svg)](https://github.com/Fhwang0926/open-trading-api/actions/workflows/publish-npm.yml)
+
 Korea Investment & Securities Open API를 위한 TypeScript ESM Node.js SDK입니다. `python-kis`를 기준 구현으로 삼고, 공식 [`koreainvestment/open-trading-api`](https://github.com/koreainvestment/open-trading-api)의 `kis_devlp.yaml`, `prod/vps/ops/vops` 도메인, `custtype`, POST `hashkey` 관례를 반영합니다.
 
 ## 설치
@@ -306,9 +309,9 @@ GitHub Actions 배포는 npm Trusted Publisher를 사용합니다. npm 패키지
 
 배포 순서:
 
-1. `package.json`의 `version`을 올리고 커밋합니다.
-2. `v1.0.1`처럼 `v` 접두사가 있는 `vMAJOR.MINOR.PATCH` 태그를 만들고 push합니다.
-3. `Publish npm Package` workflow가 태그에서 `1.0.1`을 파싱하고 `package.json` 버전과 일치하는지 확인합니다.
+1. `v1.0.1`처럼 `v` 접두사가 있는 `vMAJOR.MINOR.PATCH` 태그를 만들고 push합니다.
+2. `Publish npm Package` workflow가 태그에서 `1.0.1`을 파싱합니다.
+3. workflow 실행 중 `package.json`과 `package-lock.json`의 버전을 태그 버전으로 반영합니다.
 4. 태그 push로 실행된 경우 GitHub Release를 자동 생성합니다.
 5. workflow가 OIDC로 npm에 인증하고 `npm publish --access public`을 실행합니다.
 
