@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { mkdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { homedir } from "node:os";
@@ -72,8 +71,6 @@ export interface FetchOptions<T> extends RequestOptions {
 }
 
 export class PyKis {
-  readonly appkey: KisKey;
-  readonly virtualAppkey?: KisKey;
   primaryAccount?: KisAccountNumber;
   readonly cache = new KisCacheStorage();
   readonly fetcher: typeof fetch;
@@ -84,10 +81,12 @@ export class PyKis {
   readonly domains: Record<DomainType, string>;
   readonly websocketDomains: Record<DomainType, string>;
 
-  private tokenValue?: KisAccessToken;
-  private virtualTokenValue?: KisAccessToken;
-  private keepTokenDir?: string;
-  private readonly rateLimiters = {
+  readonly #appkey: KisKey;
+  readonly #virtualAppkey?: KisKey;
+  #tokenValue?: KisAccessToken;
+  #virtualTokenValue?: KisAccessToken;
+  #keepTokenDir?: string;
+  readonly #rateLimiters = {
     real: new RateLimiter(REAL_API_REQUEST_PER_SECOND, 1000),
     virtual: new RateLimiter(VIRTUAL_API_REQUEST_PER_SECOND, 1000)
   };
@@ -103,32 +102,30 @@ export class PyKis {
 
     if (options.auth instanceof KisAuth) {
       if (options.auth.virtual) throw new Error("auth must be real-domain auth.");
-      id = options.auth.id;
       appkey = options.auth.key;
       account = options.auth.accountNumber;
     }
     if (options.virtualAuth instanceof KisAuth) {
       if (!options.virtualAuth.virtual) throw new Error("virtualAuth must be virtual-domain auth.");
-      virtualId = options.virtualAuth.id;
       virtualAppkey = options.virtualAuth.key;
       account = options.virtualAuth.accountNumber;
     }
 
-    if (!id) throw new Error("id is required.");
+    if (!id && !(appkey instanceof KisKey)) throw new Error("id is required.");
     if (!appkey) throw new Error("appkey is required.");
-    this.appkey = typeof appkey === "string" ? new KisKey(id, appkey, must(secretkey, "secretkey is required.")) : appkey;
+    this.#appkey = typeof appkey === "string" ? new KisKey(id!, appkey, must(secretkey, "secretkey is required.")) : appkey;
 
     if (typeof virtualAppkey === "string") {
-      this.virtualAppkey = new KisKey(virtualId ?? id, virtualAppkey, must(virtualSecretkey, "virtualSecretkey is required."));
+      this.#virtualAppkey = new KisKey(virtualId ?? id!, virtualAppkey, must(virtualSecretkey, "virtualSecretkey is required."));
     } else if (virtualAppkey instanceof KisKey) {
-      this.virtualAppkey = virtualAppkey;
+      this.#virtualAppkey = virtualAppkey;
     }
 
     this.primaryAccount = typeof account === "string" ? new KisAccountNumber(account) : account;
-    this.tokenValue = options.token instanceof KisAccessToken ? options.token : undefined;
-    this.virtualTokenValue = options.virtualToken instanceof KisAccessToken ? options.virtualToken : undefined;
+    this.#tokenValue = options.token instanceof KisAccessToken ? options.token : undefined;
+    this.#virtualTokenValue = options.virtualToken instanceof KisAccessToken ? options.virtualToken : undefined;
     this.fetcher = options.fetcher ?? fetch;
-    this.defaultDomain = (options.virtual ?? this.virtualAppkey !== undefined) ? "virtual" : "real";
+    this.defaultDomain = (options.virtual ?? this.#virtualAppkey !== undefined) ? "virtual" : "real";
     this.userAgent = options.userAgent ?? USER_AGENT;
     this.custType = options.custType ?? DEFAULT_CUST_TYPE;
     this.domains = {
@@ -139,7 +136,7 @@ export class PyKis {
       real: options.realWebsocketDomain ?? WEBSOCKET_REAL_DOMAIN,
       virtual: options.virtualWebsocketDomain ?? WEBSOCKET_VIRTUAL_DOMAIN
     };
-    if (options.keepToken) this.keepTokenDir = resolve(options.keepToken === true ? join(homedir(), ".open-trading-api") : options.keepToken);
+    if (options.keepToken) this.#keepTokenDir = resolve(options.keepToken === true ? join(homedir(), ".open-trading-api") : options.keepToken);
     if (options.useWebsocket ?? true) this.websocket = new KisWebsocketClient(this);
   }
 
@@ -206,7 +203,7 @@ export class PyKis {
     }
 
     while (true) {
-      await this.rateLimiters[domain].acquire();
+      await this.#rateLimiters[domain].acquire();
       if (options.auth ?? true) {
         (await this.accessToken(domain)).build(headers);
         if (this.custType) headers.custtype = this.custType;
@@ -234,8 +231,8 @@ export class PyKis {
         continue;
       }
       if (code === "EGW00123") {
-        if (domain === "real") this.tokenValue = undefined;
-        else this.virtualTokenValue = undefined;
+        if (domain === "real") this.#tokenValue = undefined;
+        else this.#virtualTokenValue = undefined;
         continue;
       }
       throw new KisHTTPError(response, data);
@@ -254,17 +251,19 @@ export class PyKis {
     return options.mapper ? options.mapper(data, response) : (data as T);
   }
 
+  /** @internal */
   async accessToken(domain: DomainType = this.defaultDomain): Promise<KisAccessToken> {
-    if (domain === "virtual" && !this.virtualAppkey && this.defaultDomain !== "virtual") return this.accessToken("real");
-    const current = domain === "real" ? this.tokenValue : this.virtualTokenValue;
+    if (domain === "virtual" && !this.#virtualAppkey && this.defaultDomain !== "virtual") return this.accessToken("real");
+    const current = domain === "real" ? this.#tokenValue : this.#virtualTokenValue;
     if (current && current.remainingMs > 10 * 60 * 1000) return current;
     const issued = await this.issueToken(domain);
-    if (domain === "real") this.tokenValue = issued;
-    else this.virtualTokenValue = issued;
+    if (domain === "real") this.#tokenValue = issued;
+    else this.#virtualTokenValue = issued;
     await this.saveCachedToken(domain);
     return issued;
   }
 
+  /** @internal */
   async issueToken(domain: DomainType = this.defaultDomain): Promise<KisAccessToken> {
     return this.fetch("/oauth2/tokenP", {
       method: "POST",
@@ -276,6 +275,7 @@ export class PyKis {
     });
   }
 
+  /** @internal */
   async revokeToken(token: string): Promise<void> {
     const response = await this.request("/oauth2/revokeP", {
       method: "POST",
@@ -286,6 +286,7 @@ export class PyKis {
     if (!response.ok) throw new KisHTTPError(response);
   }
 
+  /** @internal */
   async hashkey(body: Record<string, string>, domain: DomainType = this.defaultDomain): Promise<string> {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
@@ -294,7 +295,7 @@ export class PyKis {
       "User-Agent": this.userAgent
     };
     this.keyFor(domain).build(headers);
-    await this.rateLimiters[domain].acquire();
+    await this.#rateLimiters[domain].acquire();
     const response = await this.fetcher(new URL("/uapi/hashkey", this.apiDomain(domain)), {
       method: "POST",
       headers,
@@ -311,25 +312,22 @@ export class PyKis {
   }
 
   async discard(domain?: DomainType): Promise<void> {
-    if (this.tokenValue && (!domain || domain === "real")) {
-      await this.revokeToken(this.tokenValue.token);
-      this.tokenValue = undefined;
+    if (this.#tokenValue && (!domain || domain === "real")) {
+      await this.revokeTokenFromAccessToken(this.#tokenValue);
+      this.#tokenValue = undefined;
     }
-    if (this.virtualTokenValue && (!domain || domain === "virtual")) {
-      await this.revokeToken(this.virtualTokenValue.token);
-      this.virtualTokenValue = undefined;
+    if (this.#virtualTokenValue && (!domain || domain === "virtual")) {
+      await this.revokeTokenFromAccessToken(this.#virtualTokenValue);
+      this.#virtualTokenValue = undefined;
     }
   }
 
+  /** @internal */
   async websocketApprovalKey(domain: DomainType = this.defaultDomain): Promise<string> {
     const key = this.keyFor(domain);
     const data = await this.fetch<{ approval_key: string }>("/oauth2/Approval", {
       method: "POST",
-      body: {
-        grant_type: "client_credentials",
-        appkey: key.appkey,
-        secretkey: key.secretkey
-      },
+      body: key.buildApprovalBody({ grant_type: "client_credentials" }),
       appkeyLocation: null,
       auth: false,
       domain
@@ -341,10 +339,10 @@ export class PyKis {
     this.websocket?.disconnect();
   }
 
-  keyFor(domain: DomainType): KisKey {
-    if (domain === "real") return this.appkey;
-    if (this.virtualAppkey) return this.virtualAppkey;
-    if (this.defaultDomain === "virtual") return this.appkey;
+  private keyFor(domain: DomainType): KisKey {
+    if (domain === "real") return this.#appkey;
+    if (this.#virtualAppkey) return this.#virtualAppkey;
+    if (this.defaultDomain === "virtual") return this.#appkey;
     throw new Error("Virtual appkey is not configured.");
   }
 
@@ -357,15 +355,15 @@ export class PyKis {
   }
 
   private async loadCachedTokens(): Promise<void> {
-    if (!this.keepTokenDir) return;
+    if (!this.#keepTokenDir) return;
     try {
-      this.tokenValue = await KisAccessToken.load(join(this.keepTokenDir, this.tokenFileName("real")));
+      this.#tokenValue = await KisAccessToken.load(join(this.#keepTokenDir, this.tokenFileName("real")));
     } catch {
       // Missing or stale cache is fine.
     }
-    if (this.virtual || this.virtualAppkey) {
+    if (this.virtual || this.#virtualAppkey) {
       try {
-        this.virtualTokenValue = await KisAccessToken.load(join(this.keepTokenDir, this.tokenFileName("virtual")));
+        this.#virtualTokenValue = await KisAccessToken.load(join(this.#keepTokenDir, this.tokenFileName("virtual")));
       } catch {
         // Missing or stale cache is fine.
       }
@@ -373,16 +371,25 @@ export class PyKis {
   }
 
   private async saveCachedToken(domain: DomainType): Promise<void> {
-    if (!this.keepTokenDir) return;
-    await mkdir(this.keepTokenDir, { recursive: true });
-    const token = domain === "real" ? this.tokenValue : this.virtualTokenValue;
-    if (token) await token.save(join(this.keepTokenDir, this.tokenFileName(domain)));
+    if (!this.#keepTokenDir) return;
+    await mkdir(this.#keepTokenDir, { recursive: true });
+    const token = domain === "real" ? this.#tokenValue : this.#virtualTokenValue;
+    if (token) await token.save(join(this.#keepTokenDir, this.tokenFileName(domain)));
   }
 
   private tokenFileName(domain: DomainType): string {
     const key = this.keyFor(domain);
-    const hash = createHash("sha1").update(`pykis${key.id}${key.appkey}${key.secretkey}token`).digest("hex");
-    return `token_${domain}_${key.id}_${hash}.json`;
+    return `token_${domain}_${key.cacheKey("token")}.json`;
+  }
+
+  private async revokeTokenFromAccessToken(token: KisAccessToken): Promise<void> {
+    const response = await this.request("/oauth2/revokeP", {
+      method: "POST",
+      body: token.buildRevokeBody(),
+      appkeyLocation: "body",
+      auth: false
+    });
+    if (!response.ok) throw new KisHTTPError(response);
   }
 }
 

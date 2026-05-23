@@ -1,6 +1,6 @@
 export { KisAccountNumber } from "./account-number.js";
 export { KisAuth, KisKey } from "./auth.js";
-export { defaultKisConfigPath, loadKisConfig, parseKisConfig, pyKisOptionsFromConfig } from "./config.js";
+export { defaultKisConfigPath, loadKisConfig, parseKisConfig } from "./config.js";
 export type { KisConfig, KisConfigMode, KisConfigOptions } from "./config.js";
 export { PyKis } from "./client.js";
 export { KisAPIError, KisException, KisHTTPError, KisMarketNotOpenedError, KisNotFoundError } from "./errors.js";

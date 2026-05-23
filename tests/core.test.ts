@@ -1,7 +1,9 @@
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { inspect } from "node:util";
 import { describe, expect, it } from "vitest";
+import { pyKisOptionsFromConfig } from "../src/config.js";
 import {
   decryptAesCbcBase64,
   ensurePrice,
@@ -12,7 +14,6 @@ import {
   loadKisConfig,
   orderCondition,
   parseRealtimeResponse,
-  pyKisOptionsFromConfig,
   PyKis
 } from "../src/index.js";
 import { createCipheriv, randomBytes } from "node:crypto";
@@ -35,6 +36,18 @@ describe("core models", () => {
     expect(() => new KisKey("user", "short", SECRET)).toThrow(/appkey length/);
   });
 
+  it("redacts key and auth values in public serialization", () => {
+    const key = new KisKey("user", APPKEY, SECRET);
+    const auth = new KisAuth({ id: "user", appkey: APPKEY, secretkey: SECRET, account: "12345678-01", virtual: false });
+
+    expect(Object.keys(key)).toEqual([]);
+    expect(JSON.stringify(key)).not.toContain(APPKEY);
+    expect(JSON.stringify(key)).not.toContain(SECRET);
+    expect(inspect(key)).not.toContain(APPKEY);
+    expect(inspect(auth)).not.toContain(SECRET);
+    expect(JSON.stringify(auth)).not.toContain("12345678-01");
+  });
+
   it("saves and loads auth files", async () => {
     const dir = await mkdtemp(join(tmpdir(), "kis-auth-"));
     const file = join(dir, "auth.json");
@@ -55,8 +68,21 @@ describe("core models", () => {
     });
     await token.save(file);
     expect(await readFile(file, "utf8")).toContain("access_token");
-    expect((await KisAccessToken.load(file)).toString()).toBe("Bearer abc");
+    expect((await KisAccessToken.load(file)).toString()).toBe("Bearer ***");
     await rm(dir, { recursive: true, force: true });
+  });
+
+  it("redacts access tokens in string and json output", () => {
+    const token = new KisAccessToken({
+      access_token: "abc123456789",
+      token_type: "Bearer",
+      access_token_token_expired: "2999-01-01 00:00:00",
+      expires_in: 86400
+    });
+
+    expect(token.toString()).toBe("Bearer abc1...6789");
+    expect(JSON.stringify(token)).not.toContain("abc123456789");
+    expect(inspect(token)).not.toContain("abc123456789");
   });
 
   it("loads official kis_devlp.yaml style config", async () => {
