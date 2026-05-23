@@ -293,7 +293,7 @@ npm publish --access public
 이 저장소에는 두 개의 workflow가 있습니다.
 
 - `.github/workflows/ci.yml`: push, pull request, 수동 실행에서 typecheck/test/build/pack 검증
-- `.github/workflows/publish-npm.yml`: GitHub Release 발행 또는 수동 실행 시 npm 공개 배포
+- `.github/workflows/publish-npm.yml`: 버전 태그 push, GitHub Release 발행, 또는 수동 실행 시 npm 공개 배포
 
 GitHub Actions 배포는 npm Trusted Publisher를 사용합니다. npm 패키지 설정의 Trusted Publisher 값은 다음과 같이 맞춥니다.
 
@@ -307,10 +307,17 @@ GitHub Actions 배포는 npm Trusted Publisher를 사용합니다. npm 패키지
 배포 순서:
 
 1. `package.json`의 `version`을 올리고 커밋합니다.
-2. `v1.0.1`처럼 `package.json` 버전과 같은 태그로 GitHub Release를 발행합니다.
-3. `Publish npm Package` workflow가 OIDC로 npm에 인증하고 `npm publish --access public`을 실행합니다.
+2. `v1.0.1`처럼 `v` 접두사가 있는 `vMAJOR.MINOR.PATCH` 태그를 만들고 push합니다.
+3. `Publish npm Package` workflow가 태그에서 `1.0.1`을 파싱하고 `package.json` 버전과 일치하는지 확인합니다.
+4. 태그 push로 실행된 경우 GitHub Release를 자동 생성합니다.
+5. workflow가 OIDC로 npm에 인증하고 `npm publish --access public`을 실행합니다.
 
 Trusted publishing에서는 npm token secret이 필요하지 않습니다. 공개 GitHub 저장소에서 publish하면 npm provenance도 자동으로 생성됩니다.
+
+```bash
+git tag v1.0.1
+git push origin v1.0.1
+```
 
 ## 주요 export
 
