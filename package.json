@@ -1,0 +1,62 @@
+{
+  "name": "open-trading-api",
+  "version": "0.1.0",
+  "description": "Node.js TypeScript client for Korea Investment & Securities Open Trading API, based on python-kis.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "NOTICE",
+    "LICENCE",
+    ".env.example"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "test:integration": "RUN_KIS_INTEGRATION=1 vitest run tests/integration",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "keywords": [
+    "trading",
+    "koreainvestment",
+    "kis",
+    "openapi",
+    "typescript",
+    "websocket"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Fhwang0926/open-trading-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Fhwang0926/open-trading-api/issues"
+  },
+  "homepage": "https://github.com/Fhwang0926/open-trading-api#readme",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "dependencies": {
+    "decimal.js": "^10.4.3",
+    "ws": "^8.17.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.15",
+    "@types/ws": "^8.5.12",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

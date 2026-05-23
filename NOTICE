@@ -1,0 +1,9 @@
+open-trading-api is a TypeScript/Node.js SDK conversion project based on the public
+python-kis project by Soju06.
+
+Source project: https://github.com/Soju06/python-kis
+License: MIT
+
+This package keeps the PyKis-style public API where practical while using
+TypeScript-native internals, explicit response mappers, Node fetch, ws, and
+decimal.js.
