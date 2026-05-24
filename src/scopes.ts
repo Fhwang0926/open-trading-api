@@ -6,6 +6,7 @@ import type {
   KisBalance,
   KisChart,
   KisDailyOrders,
+  KisInvestors,
   KisOrder,
   KisOrderbook,
   KisOrderableAmount,
@@ -27,6 +28,7 @@ import {
   dailyOrders,
   dayChart,
   dailyChart,
+  investors,
   modifyOrder,
   cancelOrder,
   order,
@@ -128,6 +130,12 @@ export class StockScope {
 
   async dayChart(options: { start?: Date; end?: Date; period?: number } = {}): Promise<KisChart> {
     return dayChart(this.kis, this.symbol, await this.market(), options);
+  }
+
+  async investors(): Promise<KisInvestors> {
+    const market = await this.market();
+    if (market !== "KRX") throw new Error("Investor trends are only supported for KRX stocks.");
+    return investors(this.kis, this.symbol);
   }
 
   chart(range: string, options: { period?: ChartPeriod; adjust?: boolean } = {}): Promise<KisChart> {

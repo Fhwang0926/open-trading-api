@@ -4,19 +4,27 @@ import { STOCK_SIGN_TYPE_MAP } from "./types.js";
 
 export type AnyRecord = Record<string, any>;
 
+function normalizeNumeric(value: unknown): unknown {
+  return typeof value === "string" ? value.replaceAll(",", "").trim() : value;
+}
+
 export function asDecimal(value: unknown, fallback: Decimal.Value = 0): Decimal {
-  if (value === null || value === undefined || value === "") return new Decimal(fallback);
-  return new Decimal(value as Decimal.Value);
+  const normalized = normalizeNumeric(value);
+  if (normalized === null || normalized === undefined || normalized === "") return new Decimal(fallback);
+  return new Decimal(normalized as Decimal.Value);
 }
 
 export function asOptionalDecimal(value: unknown): Decimal | null {
-  if (value === null || value === undefined || value === "") return null;
-  return new Decimal(value as Decimal.Value);
+  const normalized = normalizeNumeric(value);
+  if (normalized === null || normalized === undefined || normalized === "") return null;
+  return new Decimal(normalized as Decimal.Value);
 }
 
 export function asInt(value: unknown, fallback = 0): number {
-  if (value === null || value === undefined || value === "") return fallback;
-  return Number.parseInt(String(value), 10);
+  const normalized = normalizeNumeric(value);
+  if (normalized === null || normalized === undefined || normalized === "") return fallback;
+  const parsed = Number.parseInt(String(normalized), 10);
+  return Number.isNaN(parsed) ? fallback : parsed;
 }
 
 export function asBool(value: unknown): boolean {

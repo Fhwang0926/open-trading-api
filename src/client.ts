@@ -7,13 +7,18 @@ import { KisCacheStorage } from "./cache.js";
 import { loadKisConfig, pyKisOptionsFromConfig, type KisConfigOptions } from "./config.js";
 import { KisAPIError, KisHTTPError } from "./errors.js";
 import { RateLimiter } from "./rate-limiter.js";
+import { currencyDailyChart, ranking } from "./rest.js";
 import { AccountScope, StockScope } from "./scopes.js";
 import { KisAccessToken } from "./token.js";
 import {
+  type ChartPeriod,
   DEFAULT_CUST_TYPE,
   REAL_API_REQUEST_PER_SECOND,
   REAL_DOMAIN,
   type DomainType,
+  type KisCurrencyChart,
+  type KisRanking,
+  type KisRankingMarketCode,
   USER_AGENT,
   VIRTUAL_API_REQUEST_PER_SECOND,
   VIRTUAL_DOMAIN,
@@ -174,6 +179,31 @@ export class PyKis {
   stock(symbol: string, market?: Parameters<typeof StockScope.prototype.withMarket>[0], account?: string | KisAccountNumber): StockScope {
     const accountNumber = typeof account === "string" ? new KisAccountNumber(account) : account ?? this.primary;
     return new StockScope(this, symbol, accountNumber, market ?? null);
+  }
+
+  currencyDailyChart(
+    symbol = "FX@KRWKFTC",
+    options: { start?: Date | string; end?: Date | string; period?: ChartPeriod } = {}
+  ): Promise<KisCurrencyChart> {
+    return currencyDailyChart(this, symbol, options);
+  }
+
+  rankingMarketCap(
+    options: { market?: KisRankingMarketCode; targetClassCode?: string; excludeClassCode?: string } = {}
+  ): Promise<KisRanking> {
+    return ranking(this, "marketCap", options);
+  }
+
+  rankingVolume(
+    options: { market?: KisRankingMarketCode; targetClassCode?: string; excludeClassCode?: string } = {}
+  ): Promise<KisRanking> {
+    return ranking(this, "volume", options);
+  }
+
+  rankingFluctuation(
+    options: { market?: KisRankingMarketCode; targetClassCode?: string; excludeClassCode?: string } = {}
+  ): Promise<KisRanking> {
+    return ranking(this, "fluctuation", options);
   }
 
   async request(path: string, options: RequestOptions = {}): Promise<Response> {

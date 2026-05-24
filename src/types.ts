@@ -26,6 +26,8 @@ export type DomesticOrderCondition = "condition" | "best" | "priority" | "extend
 export type ForeignOrderCondition = "LOO" | "LOC" | "MOO" | "MOC" | "extended";
 export type OrderCondition = DomesticOrderCondition | ForeignOrderCondition;
 export type ChartPeriod = "day" | "week" | "month" | "year";
+export type KisRankingMarketCode = "J" | "Q" | "K";
+export type KisRankingType = "marketCap" | "volume" | "fluctuation";
 export type OrderPriceInput = Decimal.Value;
 export type OrderQuantityInput = Decimal.Value;
 
@@ -241,6 +243,62 @@ export interface KisChart extends RawBacked {
   market: MarketType;
   timezone: string;
   bars: KisChartBar[];
+}
+
+export interface KisCurrencyChart extends RawBacked {
+  symbol: string;
+  timezone: string;
+  bars: KisChartBar[];
+}
+
+export interface KisInvestorTrendItem extends RawBacked {
+  date: Date;
+  dateKst: Date;
+  close: Decimal;
+  change: Decimal;
+  rate: Decimal;
+  foreignNet: number;
+  institutionNet: number;
+  individualNet: number;
+  foreignNetQuantity: number;
+  institutionNetQuantity: number;
+  individualNetQuantity: number;
+}
+
+export interface KisInvestors extends RawBacked {
+  symbol: string;
+  items: KisInvestorTrendItem[];
+  foreignTotal: number;
+  institutionTotal: number;
+  individualTotal: number;
+  foreignTotalQuantity: number;
+  institutionTotalQuantity: number;
+  individualTotalQuantity: number;
+}
+
+export interface KisRankingItem extends RawBacked {
+  rank: number;
+  symbol: string;
+  name: string;
+  price: Decimal;
+  change: Decimal;
+  sign: StockSignType;
+  changeSign: StockSignType;
+  changeRate: Decimal;
+  rate: Decimal;
+  volume: number;
+  prevVolume: number;
+  tradingValue: Decimal;
+  listedShares: number;
+  volumeRate: Decimal;
+  turnoverRate: Decimal;
+}
+
+export interface KisRanking extends RawBacked {
+  market: KisRankingMarketCode;
+  type: KisRankingType;
+  rankingType: KisRankingType;
+  items: KisRankingItem[];
 }
 
 export interface KisDeposit extends RawBacked {

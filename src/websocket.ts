@@ -11,6 +11,8 @@ import {
 
 const TR_SUBSCRIBE_TYPE = "1";
 const TR_UNSUBSCRIBE_TYPE = "2";
+const DOMESTIC_EXECUTION_TR_IDS = new Set(["H0STCNI0", "H0STCNI9"]);
+const FOREIGN_EXECUTION_TR_IDS = new Set(["H0GSCNI0", "H0GSCNI9"]);
 
 export interface KisSubscribedEvent {
   tr: KisWebsocketTR;
@@ -244,10 +246,73 @@ export function parseRealtimeResponse(trId: string, raw: string[]): KisRealtimeR
   if (trId === "H0STASP0" || trId === "HDFSASP0" || trId === "HDFSASP1") {
     return { trId, raw, kind: "orderbook", symbol: raw[0] };
   }
-  if (trId === "H0STCNI0" || trId === "H0STCNI9" || trId === "H0GSCNI0" || trId === "H0GSCNI9") {
-    return { trId, raw, kind: "execution", account: raw[0], orderNumber: raw[2] };
-  }
+  if (DOMESTIC_EXECUTION_TR_IDS.has(trId)) return parseDomesticExecutionResponse(trId, raw);
+  if (FOREIGN_EXECUTION_TR_IDS.has(trId)) return parseForeignExecutionResponse(trId, raw);
   return { trId, raw, kind: "unknown" };
+}
+
+function parseDomesticExecutionResponse(trId: string, raw: string[]): KisRealtimeResponse {
+  return {
+    trId,
+    raw,
+    kind: "execution",
+    customerId: raw[0],
+    account: raw[1] ?? raw[0],
+    orderNumber: raw[2],
+    originalOrderNumber: raw[3],
+    type: orderTypeFromExecutionCode(raw[4]),
+    orderKind: raw[6],
+    symbol: raw[8],
+    executedQuantity: raw[9],
+    price: raw[10],
+    time: raw[11],
+    rejected: raw[12] === "1",
+    accepted: raw[14] === "1",
+    canceled: raw[14] === "3",
+    branch: raw[15],
+    quantity: raw[16],
+    orderConditionPrice: raw[18],
+    orderExchangeCode: raw[19],
+    realtimeDisplay: raw[20],
+    creditType: raw[22],
+    creditLoanDate: raw[23],
+    name: raw[24],
+    unitPrice: raw[25]
+  };
+}
+
+function parseForeignExecutionResponse(trId: string, raw: string[]): KisRealtimeResponse {
+  return {
+    trId,
+    raw,
+    kind: "execution",
+    customerId: raw[0],
+    account: raw[1] ?? raw[0],
+    orderNumber: raw[2],
+    originalOrderNumber: raw[3],
+    type: orderTypeFromExecutionCode(raw[4]),
+    orderKind: raw[6],
+    symbol: raw[7],
+    executedQuantity: raw[8],
+    price: raw[9],
+    time: raw[10],
+    rejected: raw[11] === "1",
+    accepted: raw[13] === "1",
+    canceled: raw[13] === "3",
+    branch: raw[14],
+    quantity: raw[15],
+    orderConditionPrice: raw[17],
+    marketCode: raw[18],
+    orderExchangeCode: raw[18],
+    name: raw[19],
+    unitPrice: raw[20]
+  };
+}
+
+function orderTypeFromExecutionCode(code: string | undefined): string | undefined {
+  if (code === "01") return "sell";
+  if (code === "02") return "buy";
+  return code;
 }
 
 function trKey(tr: KisWebsocketTR): string {

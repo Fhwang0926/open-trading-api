@@ -18,10 +18,13 @@ import {
   type KisBalanceStock,
   type KisChart,
   type KisChartBar,
+  type KisCurrencyChart,
   type KisDailyOrder,
   type KisDailyOrders,
   type KisDeposit,
   type KisIndicator,
+  type KisInvestors,
+  type KisInvestorTrendItem,
   type KisOrder,
   type KisOrderProfit,
   type KisOrderProfits,
@@ -31,6 +34,10 @@ import {
   type KisPendingOrder,
   type KisPendingOrders,
   type KisQuote,
+  type KisRanking,
+  type KisRankingItem,
+  type KisRankingMarketCode,
+  type KisRankingType,
   type KisStockInfo,
   type MarketInfoType,
   type MarketType,
@@ -118,6 +125,12 @@ const MARKET_CODE_NAME: Record<string, string> = {
   "508": "호치민",
   "551": "상하이",
   "552": "심천"
+};
+
+const RANKING_SCREEN_CODE: Record<KisRankingType, string> = {
+  marketCap: "20174",
+  volume: "20171",
+  fluctuation: "20170"
 };
 
 export async function resolveMarket(kis: PyKis, symbol: string, market?: MarketInfoType): Promise<MarketType> {
@@ -276,6 +289,28 @@ export async function dailyChart(
   });
 }
 
+export function currencyDailyChart(
+  kis: PyKis,
+  symbol = "FX@KRWKFTC",
+  options: { start?: Date | string; end?: Date | string; period?: ChartPeriod } = {}
+): Promise<KisCurrencyChart> {
+  const end = normalizeDateInput(options.end);
+  const start = options.start ? normalizeDateInput(options.start) : undefined;
+  const period = options.period ?? "day";
+  return kis.fetch("/uapi/overseas-price/v1/quotations/inquire-daily-chartprice", {
+    api: "FHKST03030100",
+    domain: "real",
+    params: {
+      FID_COND_MRKT_DIV_CODE: "X",
+      FID_INPUT_ISCD: symbol,
+      FID_INPUT_DATE_1: start ? formatDate(start) : "00000101",
+      FID_INPUT_DATE_2: formatDate(end),
+      FID_PERIOD_DIV_CODE: period === "day" ? "D" : period === "week" ? "W" : period === "month" ? "M" : "Y"
+    },
+    mapper: (data, response) => mapCurrencyDailyChart(symbol, data, response)
+  });
+}
+
 export async function dayChart(
   kis: PyKis,
   symbol: string,
@@ -312,6 +347,45 @@ export async function dayChart(
       KEYB: ""
     },
     mapper: (data, response) => mapForeignDayChart(symbol, market, prev.prevPrice, data, response, options.period ?? 1)
+  });
+}
+
+export function investors(kis: PyKis, symbol: string): Promise<KisInvestors> {
+  if (!symbol) throw new Error("symbol is required.");
+  return kis.fetch("/uapi/domestic-stock/v1/quotations/inquire-investor", {
+    api: "FHKST01010900",
+    domain: "real",
+    params: {
+      FID_COND_MRKT_DIV_CODE: "J",
+      FID_INPUT_ISCD: symbol
+    },
+    mapper: (data, response) => mapDomesticInvestors(symbol, data, response)
+  });
+}
+
+export function ranking(
+  kis: PyKis,
+  type: KisRankingType,
+  options: { market?: KisRankingMarketCode; targetClassCode?: string; excludeClassCode?: string } = {}
+): Promise<KisRanking> {
+  const market = options.market ?? "J";
+  return kis.fetch("/uapi/domestic-stock/v1/ranking/market-cap", {
+    api: "FHPST01710000",
+    domain: "real",
+    params: {
+      FID_COND_MRKT_DIV_CODE: market,
+      FID_COND_SCR_DIV_CODE: RANKING_SCREEN_CODE[type],
+      FID_INPUT_ISCD: "0000",
+      FID_DIV_CLS_CODE: "0",
+      FID_BLNG_CLS_CODE: "0",
+      FID_TRGT_CLS_CODE: options.targetClassCode ?? "111111111",
+      FID_TRGT_EXLS_CLS_CODE: options.excludeClassCode ?? "000000",
+      FID_INPUT_PRICE_1: "",
+      FID_INPUT_PRICE_2: "",
+      FID_VOL_CNT: "",
+      FID_INPUT_DATE_1: ""
+    },
+    mapper: (data, response) => mapDomesticRanking(market, type, data, response)
   });
 }
 
@@ -845,6 +919,96 @@ function mapForeignDailyChart(symbol: string, market: MarketType, data: AnyRecor
   });
   bars.reverse();
   return { symbol, market, timezone: MARKET_TIMEZONE_MAP[market], bars, raw: data, meta: apiMeta(data, response) };
+}
+
+function mapCurrencyDailyChart(symbol: string, data: AnyRecord, response: Response): KisCurrencyChart {
+  const bars = outputArray(data, "output2").map((row) => {
+    const close = asDecimal(row.ovrs_nmix_prpr ?? row.stck_clpr ?? row.close);
+    const change = asDecimal(row.ovrs_nmix_prdy_vrss ?? row.prdy_vrss ?? row.diff ?? row.change);
+    return chartBar(row, toKstDate(String(row.stck_bsop_date ?? row.xymd ?? row.trad_dt), "date"), close, change, {
+      open: row.ovrs_nmix_oprc ?? row.ovrs_prod_oprc ?? row.stck_oprc ?? row.open,
+      high: row.ovrs_nmix_hgpr ?? row.ovrs_prod_hgpr ?? row.stck_hgpr ?? row.high,
+      low: row.ovrs_nmix_lwpr ?? row.ovrs_prod_lwpr ?? row.stck_lwpr ?? row.low,
+      volume: row.acml_vol,
+      amount: row.acml_tr_pbmn,
+      sign: row.prdy_vrss_sign
+    });
+  });
+  bars.reverse();
+  return { symbol, timezone: MARKET_TIMEZONE_MAP.KRX, bars, raw: data, meta: apiMeta(data, response) };
+}
+
+function mapDomesticInvestors(symbol: string, data: AnyRecord, response: Response): KisInvestors {
+  const items = outputArray(data, "output").map((row) => mapDomesticInvestorTrend(row));
+  const foreignTotalQuantity = items.reduce((total, item) => total + item.foreignNetQuantity, 0);
+  const institutionTotalQuantity = items.reduce((total, item) => total + item.institutionNetQuantity, 0);
+  const individualTotalQuantity = items.reduce((total, item) => total + item.individualNetQuantity, 0);
+  return {
+    symbol,
+    items,
+    foreignTotal: foreignTotalQuantity,
+    institutionTotal: institutionTotalQuantity,
+    individualTotal: individualTotalQuantity,
+    foreignTotalQuantity,
+    institutionTotalQuantity,
+    individualTotalQuantity,
+    raw: data,
+    meta: apiMeta(data, response)
+  };
+}
+
+function mapDomesticInvestorTrend(row: AnyRecord): KisInvestorTrendItem {
+  const date = toKstDate(String(row.stck_bsop_date ?? ""), "date");
+  const foreignNetQuantity = asInt(row.frgn_ntby_qty);
+  const institutionNetQuantity = asInt(row.orgn_ntby_qty);
+  const individualNetQuantity = asInt(row.prsn_ntby_qty);
+  return {
+    date,
+    dateKst: date,
+    close: asDecimal(row.stck_clpr),
+    change: asDecimal(row.prdy_vrss),
+    rate: asDecimal(row.prdy_ctrt),
+    foreignNet: foreignNetQuantity,
+    institutionNet: institutionNetQuantity,
+    individualNet: individualNetQuantity,
+    foreignNetQuantity,
+    institutionNetQuantity,
+    individualNetQuantity,
+    raw: row
+  };
+}
+
+function mapDomesticRanking(market: KisRankingMarketCode, type: KisRankingType, data: AnyRecord, response: Response): KisRanking {
+  return {
+    market,
+    type,
+    rankingType: type,
+    items: outputArray(data, "output").map((row) => mapDomesticRankingItem(row)),
+    raw: data,
+    meta: apiMeta(data, response)
+  };
+}
+
+function mapDomesticRankingItem(row: AnyRecord): KisRankingItem {
+  const sign = signFromCode(row.prdy_vrss_sign);
+  return {
+    rank: asInt(row.data_rank),
+    symbol: String(row.mksc_shrn_iscd ?? ""),
+    name: String(row.hts_kor_isnm ?? ""),
+    price: asDecimal(row.stck_prpr),
+    change: asDecimal(row.prdy_vrss),
+    sign,
+    changeSign: sign,
+    changeRate: asDecimal(row.prdy_ctrt),
+    rate: asDecimal(row.prdy_ctrt),
+    volume: asInt(row.acml_vol),
+    prevVolume: asInt(row.prdy_vol),
+    tradingValue: asDecimal(row.acml_tr_pbmn),
+    listedShares: asInt(row.lstn_stcn),
+    volumeRate: asDecimal(row.vol_inrt),
+    turnoverRate: asDecimal(row.vol_tnrt),
+    raw: row
+  };
 }
 
 function mapDomesticDayChart(symbol: string, data: AnyRecord, response: Response, period: number): KisChart {

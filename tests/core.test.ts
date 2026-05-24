@@ -190,6 +190,222 @@ describe("REST mappers through PyKis", () => {
     expect(quote.rate.toString()).toBe("1.2658227848101265823");
   });
 
+  it("maps domestic investor trend responses", async () => {
+    const kis = new PyKis({
+      id: "user",
+      account: "12345678-01",
+      appkey: APPKEY,
+      secretkey: SECRET,
+      token: new KisAccessToken({
+        access_token: "abc",
+        token_type: "Bearer",
+        access_token_token_expired: "2999-01-01 00:00:00",
+        expires_in: 86400
+      }),
+      useWebsocket: false,
+      fetcher: async (input, init) => {
+        const url = new URL(String(input));
+        expect(url.pathname).toBe("/uapi/domestic-stock/v1/quotations/inquire-investor");
+        expect(url.searchParams.get("FID_COND_MRKT_DIV_CODE")).toBe("J");
+        expect(url.searchParams.get("FID_INPUT_ISCD")).toBe("005930");
+        expect((init?.headers as Record<string, string>).tr_id).toBe("FHKST01010900");
+        return new Response(
+          JSON.stringify({
+            rt_cd: "0",
+            msg_cd: "MCA00000",
+            msg1: "OK",
+            output: [
+              {
+                stck_bsop_date: "20250103",
+                stck_clpr: "80,000",
+                prdy_vrss: "1000",
+                prdy_ctrt: "1.25",
+                frgn_ntby_qty: "1,000",
+                orgn_ntby_qty: "-200",
+                prsn_ntby_qty: "-800"
+              },
+              {
+                stck_bsop_date: "20250102",
+                stck_clpr: "79000",
+                prdy_vrss: "-500",
+                prdy_ctrt: "-0.63",
+                frgn_ntby_qty: "300",
+                orgn_ntby_qty: "100",
+                prsn_ntby_qty: "-400"
+              }
+            ]
+          })
+        );
+      }
+    });
+
+    const investors = await kis.stock("005930", "KRX").investors();
+    expect(investors.items).toHaveLength(2);
+    expect(investors.items[0]?.close.toString()).toBe("80000");
+    expect(investors.foreignTotalQuantity).toBe(1300);
+    expect(investors.institutionTotalQuantity).toBe(-100);
+    expect(investors.individualTotalQuantity).toBe(-1200);
+  });
+
+  it("maps currency daily chart responses", async () => {
+    const kis = new PyKis({
+      id: "user",
+      account: "12345678-01",
+      appkey: APPKEY,
+      secretkey: SECRET,
+      token: new KisAccessToken({
+        access_token: "abc",
+        token_type: "Bearer",
+        access_token_token_expired: "2999-01-01 00:00:00",
+        expires_in: 86400
+      }),
+      useWebsocket: false,
+      fetcher: async (input, init) => {
+        const url = new URL(String(input));
+        expect(url.pathname).toBe("/uapi/overseas-price/v1/quotations/inquire-daily-chartprice");
+        expect(url.searchParams.get("FID_COND_MRKT_DIV_CODE")).toBe("X");
+        expect(url.searchParams.get("FID_INPUT_ISCD")).toBe("FX@KRWKFTC");
+        expect(url.searchParams.get("FID_INPUT_DATE_1")).toBe("20250101");
+        expect(url.searchParams.get("FID_INPUT_DATE_2")).toBe("20250103");
+        expect(url.searchParams.get("FID_PERIOD_DIV_CODE")).toBe("D");
+        expect((init?.headers as Record<string, string>).tr_id).toBe("FHKST03030100");
+        return new Response(
+          JSON.stringify({
+            rt_cd: "0",
+            msg_cd: "MCA00000",
+            msg1: "OK",
+            output2: [
+              {
+                stck_bsop_date: "20250103",
+                ovrs_nmix_prpr: "1468.0000",
+                ovrs_nmix_oprc: "1467.0000",
+                ovrs_nmix_hgpr: "1471.1000",
+                ovrs_nmix_lwpr: "1464.2000",
+                acml_vol: "0"
+              },
+              {
+                stck_bsop_date: "20250102",
+                ovrs_nmix_prpr: "1465.9000",
+                ovrs_nmix_oprc: "1460.0000",
+                ovrs_nmix_hgpr: "1466.0000",
+                ovrs_nmix_lwpr: "1455.0000",
+                acml_vol: "0"
+              }
+            ]
+          })
+        );
+      }
+    });
+
+    const chart = await kis.currencyDailyChart("FX@KRWKFTC", {
+      start: new Date(2025, 0, 1),
+      end: new Date(2025, 0, 3)
+    });
+    expect(chart.timezone).toBe("Asia/Seoul");
+    expect(chart.bars).toHaveLength(2);
+    expect(chart.bars[0]?.close.toString()).toBe("1465.9");
+    expect(chart.bars[1]?.close.toString()).toBe("1468");
+  });
+
+  it("maps domestic ranking responses", async () => {
+    const kis = new PyKis({
+      id: "user",
+      account: "12345678-01",
+      appkey: APPKEY,
+      secretkey: SECRET,
+      token: new KisAccessToken({
+        access_token: "abc",
+        token_type: "Bearer",
+        access_token_token_expired: "2999-01-01 00:00:00",
+        expires_in: 86400
+      }),
+      useWebsocket: false,
+      fetcher: async (input, init) => {
+        const url = new URL(String(input));
+        expect(url.pathname).toBe("/uapi/domestic-stock/v1/ranking/market-cap");
+        expect(url.searchParams.get("FID_COND_MRKT_DIV_CODE")).toBe("Q");
+        expect(url.searchParams.get("FID_COND_SCR_DIV_CODE")).toBe("20174");
+        expect(url.searchParams.get("FID_TRGT_CLS_CODE")).toBe("111111111");
+        expect(url.searchParams.get("FID_TRGT_EXLS_CLS_CODE")).toBe("000000");
+        expect((init?.headers as Record<string, string>).tr_id).toBe("FHPST01710000");
+        return new Response(
+          JSON.stringify({
+            rt_cd: "0",
+            msg_cd: "MCA00000",
+            msg1: "OK",
+            output: [
+              {
+                data_rank: "1",
+                mksc_shrn_iscd: "005930",
+                hts_kor_isnm: "Samsung",
+                stck_prpr: "80,000",
+                prdy_vrss: "1000",
+                prdy_vrss_sign: "2",
+                prdy_ctrt: "1.25",
+                acml_vol: "1,000",
+                prdy_vol: "900",
+                acml_tr_pbmn: "80000000",
+                lstn_stcn: "5969782550",
+                vol_inrt: "11.11",
+                vol_tnrt: "0.01"
+              }
+            ]
+          })
+        );
+      }
+    });
+
+    const ranking = await kis.rankingMarketCap({ market: "Q" });
+    expect(ranking.market).toBe("Q");
+    expect(ranking.type).toBe("marketCap");
+    expect(ranking.items[0]?.symbol).toBe("005930");
+    expect(ranking.items[0]?.price.toString()).toBe("80000");
+    expect(ranking.items[0]?.sign).toBe("rise");
+    expect(ranking.items[0]?.volume).toBe(1000);
+  });
+
+  it("keeps zero-purchase domestic balances from dividing by zero", async () => {
+    const kis = new PyKis({
+      id: "user",
+      account: "12345678-01",
+      appkey: APPKEY,
+      secretkey: SECRET,
+      token: new KisAccessToken({
+        access_token: "abc",
+        token_type: "Bearer",
+        access_token_token_expired: "2999-01-01 00:00:00",
+        expires_in: 86400
+      }),
+      useWebsocket: false,
+      fetcher: async () =>
+        new Response(
+          JSON.stringify({
+            rt_cd: "0",
+            msg_cd: "MCA00000",
+            msg1: "OK",
+            output1: [
+              {
+                pdno: "005930",
+                prdt_name: "Samsung",
+                prpr: "0",
+                hldg_qty: "0",
+                pchs_amt: "0",
+                evlu_amt: "0",
+                evlu_pfls_amt: "0",
+                evlu_pfls_rt: "",
+                ord_psbl_qty: "0"
+              }
+            ],
+            output2: [{ dnca_tot_amt: "0" }]
+          })
+        )
+    });
+
+    const balance = await kis.account().balance("KR");
+    expect(balance.profitRate.toString()).toBe("0");
+    expect(balance.stocks[0]?.profitRate.toString()).toBe("0");
+  });
+
   it("adds official headers and hashkey for UAPI POST requests", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const kis = new PyKis({
@@ -236,6 +452,44 @@ describe("websocket helpers", () => {
     const parsed = parseRealtimeResponse("H0STCNT0", ["005930", "093000", "80000", "2", "1000", "1.25"]);
     expect(parsed.kind).toBe("price");
     expect(parsed.symbol).toBe("005930");
+  });
+
+  it("parses updated domestic execution frames", () => {
+    const parsed = parseRealtimeResponse("H0STCNI0", [
+      "cust",
+      "12345678-01",
+      "000001",
+      "",
+      "02",
+      "",
+      "00",
+      "",
+      "005930",
+      "3",
+      "80000",
+      "093000",
+      "0",
+      "",
+      "1",
+      "001",
+      "5",
+      "",
+      "79000",
+      "KRX",
+      "01",
+      "",
+      "",
+      "",
+      "Samsung",
+      "81000"
+    ]);
+
+    expect(parsed.kind).toBe("execution");
+    expect(parsed.account).toBe("12345678-01");
+    expect(parsed.type).toBe("buy");
+    expect(parsed.symbol).toBe("005930");
+    expect(parsed.orderExchangeCode).toBe("KRX");
+    expect(parsed.unitPrice).toBe("81000");
   });
 
   it("decrypts AES-CBC payloads", () => {
